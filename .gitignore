@@ -1,0 +1,6 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+offer_eval.db
+frontend/node_modules/
