@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hofbuildathon2026"
+version = "0.1.0"
+description = "AI Mailroom application using LangGraph and Databricks"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+    {name = "Blake Chang", email = "your-email@example.com"}
+]
+license = {text = "MIT"}
+
+dependencies = [
+    # Databricks
+    "databricks-sql-connector>=3.0.0",
+    
+    # Spark
+    "pyspark>=3.4.0",
+    
+    # LangGraph & LangChain
+    "langgraph>=0.0.1",
+    "langchain>=0.1.0",
+    "langchain-openai>=0.0.1",
+    
+    # Environment variables
+    "python-dotenv>=1.0.0",
+    
+    # Data processing
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    
+    # Web framework (if needed)
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    
+    # Utilities
+    "pydantic>=2.0.0",
+    "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.5.0",
+    "ruff>=0.1.0",
+]
+
+[tool.setuptools]
+packages = ["ai_mailroom"]
+
+[tool.black]
+line-length = 100
+target-version = ['py39', 'py310', 'py311']
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.mypy]
+python_version = "3.9"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
