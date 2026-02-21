@@ -1,7 +1,9 @@
-<<<<<<< HEAD
-
+.env
+.env/
 *.databricks
-*.env/
-=======
 config.py
->>>>>>> 2ca5ca6cd176024090b59c0cbad81e331021690f
+__pycache__/
+*.pyc
+.venv/
+.vscode/
+.DS_Store
