@@ -1,4 +1,5 @@
 # OfferGo
+Built by Blake Chang, Danny Hua, Frankie Wu, Sean Xia
 
 OfferGo is a full-stack app that:
 - ingests offer letters (PDF),
