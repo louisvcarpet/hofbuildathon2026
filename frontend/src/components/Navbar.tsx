@@ -18,18 +18,21 @@ const Navbar = () => {
   const navigate = useNavigate();
   const { profile } = useProfile();
   const [loginOpen, setLoginOpen] = useState(false);
+  const isSignedIn = Boolean(profile.name?.trim() || profile.email?.trim());
 
   const handleLogout = () => {
     logoutDemoUser();
     window.location.href = "/";
   };
 
-  const initials = profile.name
+  const initials = profile.name?.trim()
     ? profile.name
         .split(" ")
         .map((n) => n[0])
         .join("")
         .toUpperCase()
+    : profile.email?.trim()
+    ? profile.email.trim()[0].toUpperCase()
     : "U";
 
   return (
@@ -44,7 +47,7 @@ const Navbar = () => {
           </button>
 
           <div className="flex items-center gap-3">
-            {profile.completed ? (
+            {isSignedIn ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button className="flex items-center gap-2.5 rounded-full border border-border bg-card px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted focus:outline-none">
@@ -53,7 +56,7 @@ const Navbar = () => {
                         {initials}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="hidden sm:inline text-foreground">{profile.name || "User"}</span>
+                    <span className="hidden sm:inline text-foreground">{profile.name?.trim() || profile.email || "User"}</span>
                     <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                   </button>
                 </DropdownMenuTrigger>
