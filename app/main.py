@@ -12,8 +12,11 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user_id
 from app.database import Base, engine, get_db
 from app.models import Offer, SurveyResponse
+from app.node1_extract.databricks_node import DatabricksNode
+from app.offer_workflow.state import OfferWorkflowState
 from app.schemas import (
     EvaluationOutput,
+    MarketSnapshotResponse,
     OfferChatRequest,
     OfferChatResponse,
     OfferPdfIngestResponse,
@@ -229,6 +232,41 @@ def _chat_context_from_offer(offer: Offer, survey: SurveyResponse | None) -> dic
             "risk_flags": answers.get("risk_flags", []),
         },
     }
+
+
+@app.get("/offers/{offer_id}/market-snapshot", response_model=MarketSnapshotResponse)
+def offer_market_snapshot(
+    offer_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> MarketSnapshotResponse:
+    offer = db.execute(select(Offer).where(Offer.id == offer_id, Offer.user_id == user_id)).scalar_one_or_none()
+    if not offer:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Offer not found")
+
+    survey = db.execute(
+        select(SurveyResponse)
+        .where(SurveyResponse.offer_id == offer_id, SurveyResponse.user_id == user_id)
+        .order_by(SurveyResponse.created_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    payload = _workflow_payload_from_offer(offer, survey)
+
+    try:
+        state = OfferWorkflowState(**payload)
+        state = asyncio.run(DatabricksNode()(state))
+        market_data = state.market_data or {}
+        return MarketSnapshotResponse.model_validate(market_data)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"error_code": "MARKET_SNAPSHOT_INVALID", "message": str(exc)},
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"error_code": "MARKET_SNAPSHOT_FAILURE", "message": str(exc)},
+        ) from exc
 
 
 @app.post("/offers/{offer_id}/evaluate", response_model=EvaluationOutput)
