@@ -11,17 +11,23 @@ ACCESS_TOKEN = os.getenv("DATABRICKS_TOKEN")
 
 def connect_to_databricks():
     """
-    Create a connection to Databricks SQL Warehouse
+    Create a connection to Databricks SQL Warehouse with timeout
     """
     try:
+        print(f"Attempting to connect to {SERVER_HOSTNAME}...")
         connection = sql.connect(
             server_hostname=SERVER_HOSTNAME,
             http_path=HTTP_PATH,
-            personal_access_token=ACCESS_TOKEN
+            personal_access_token=ACCESS_TOKEN,
+            request_timeout=30  # 30 second timeout
         )
+        print("Successfully connected!")
         return connection
     except Exception as e:
         print(f"Connection error: {e}")
+        print(f"  Server: {SERVER_HOSTNAME}")
+        print(f"  HTTP Path: {HTTP_PATH}")
+        print(f"  Token present: {'Yes' if ACCESS_TOKEN else 'No'}")
         return None
 
 
