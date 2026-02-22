@@ -8,3 +8,8 @@ httpx
 langgraph
 pypdf
 python-multipart
+python-dotenv
+databricks-sql-connector
+anthropic
+faker
+pandas
