@@ -51,6 +51,12 @@ def _workflow_payload_from_offer(offer: Offer, survey: SurveyResponse | None) ->
     except (TypeError, ValueError):
         years_exp = 0
 
+    user_priorities = {
+        "role_fit": answers.get("role_fit"),
+        "risk_flags": answers.get("risk_flags", []),
+        "relocation_flexibility": answers.get("relocation_flexibility"),
+        "remote_preference": answers.get("remote_preference", answers.get("remote_status")),
+    }
     return {
         "job_title": offer.role_title or "Unknown",
         "industry": answers.get("industry", "Unknown"),
@@ -62,6 +68,7 @@ def _workflow_payload_from_offer(offer: Offer, survey: SurveyResponse | None) ->
         "signing_bonus": float(answers.get("signing_bonus", 0) or 0),
         "years_exp": years_exp,
         "remote_status": answers.get("remote_status", answers.get("remote_preference", "Hybrid")),
+        "user_priorities": user_priorities,
     }
 
 
