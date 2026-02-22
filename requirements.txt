@@ -8,7 +8,6 @@ httpx
 langgraph
 pypdf
 python-multipart
-python-multipartanthropic
 faker
 pandas
 python-dotenv
