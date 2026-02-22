@@ -57,3 +57,32 @@ class MarketComps(BaseModel):
     median: float = 0
     p75: float = 0
     sample_size: int = 0
+
+
+class ParsedOfferData(BaseModel):
+    role_title: str | None = None
+    level: str | None = None
+    location: str | None = None
+    base_salary: float | None = None
+    bonus_target: float | None = None
+    equity_type: str | None = None
+    equity_amount: float | None = None
+    vesting_schedule: str | None = None
+    start_date: str | None = None
+    confidence_note: str
+
+
+class OfferPdfIngestResponse(BaseModel):
+    offer_id: int | None = None
+    survey_response_id: int | None = None
+    extracted_text_chars: int
+    extracted_text: str | None = None
+    parsed: ParsedOfferData
+
+
+class OfferChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=1000)
+
+
+class OfferChatResponse(BaseModel):
+    answer: str = Field(min_length=1, max_length=4000)

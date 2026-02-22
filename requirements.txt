@@ -6,3 +6,5 @@ requests
 pytest
 httpx
 langgraph
+pypdf
+python-multipart
