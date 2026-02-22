@@ -75,6 +75,9 @@ def _build_messages(packet: dict) -> list[dict]:
                 "Use the packet fields exactly. Do not invent market stats. "
                 "Keep score/confidence equal to score_payload.score/confidence. "
                 "If market sample is low or critical fields are missing, set recommendation to needs_more_info. "
+                "Always provide clear, actionable negotiation guidance in negotiation_targets. "
+                "If recommendation is renegotiate or needs_more_info, include at least 2 concrete asks "
+                "with rationale tied to market stats or missing-risk items. "
                 f"Return this exact shape: {json.dumps(schema_hint)}"
             ),
         },
@@ -183,5 +186,33 @@ class NemotronNode:
 
         if score_payload["missing_fields"] or int(_safe_float(market.get("sample_size", 0), 0)) < 3:
             output.recommendation = RecommendationEnum.needs_more_info
+
+        # Enforce practical guidance quality regardless of model variance.
+        if output.recommendation in {
+            RecommendationEnum.renegotiate,
+            RecommendationEnum.needs_more_info,
+        } and len(output.negotiation_targets) < 2:
+            output.negotiation_targets = [
+                {
+                    "item": "Base salary",
+                    "ask": "Request adjustment toward or above market median.",
+                    "reason": "Cash compensation is the most reliable way to close market delta.",
+                },
+                {
+                    "item": "Signing bonus",
+                    "ask": "Request a one-time signing bonus to offset immediate compensation gap.",
+                    "reason": "Helps bridge near-term difference while longer-term comp is reviewed.",
+                },
+            ]
+
+        if output.recommendation == RecommendationEnum.accept and not output.negotiation_targets:
+            output.negotiation_targets = [
+                {
+                    "item": "Offer terms confirmation",
+                    "ask": "Confirm vesting schedule, bonus conditions, and remote policy in writing.",
+                    "reason": "Reduces ambiguity and protects expected value after acceptance.",
+                }
+            ]
+
         state.llm_response = output.model_dump(mode="json")
         return state

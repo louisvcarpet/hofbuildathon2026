@@ -1,23 +1,18 @@
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Upload, Check, Save } from "lucide-react";
+import { Check, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useProfile } from "@/hooks/use-profile";
-import { useState } from "react";
 import Navbar from "@/components/Navbar";
 
 const ProfileSetup = () => {
   const navigate = useNavigate();
   const { profile, updateProfile, completeProfile } = useProfile();
-  const [resumeFile, setResumeFile] = useState<File | null>(null);
   const isEditMode = profile.completed;
 
   const handleComplete = () => {
-    if (resumeFile) {
-      updateProfile({ resumeName: resumeFile.name });
-    }
     completeProfile();
     navigate("/dashboard");
   };
@@ -100,21 +95,6 @@ const ProfileSetup = () => {
                 <Input placeholder="e.g. 20000 @ 5.5%" value={profile.debts} onChange={(e) => updateProfile({ debts: e.target.value })} />
               </div>
             </div>
-          </section>
-
-          {/* Resume */}
-          <section className="card-elevated p-6 space-y-4">
-            <h2 className="text-lg font-semibold">Resume</h2>
-            <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-border bg-secondary/50 px-4 py-3 text-sm text-muted-foreground hover:border-primary/50 transition-colors">
-              <Upload className="h-4 w-4" />
-              {resumeFile ? resumeFile.name : profile.resumeName ?? "Upload PDF or DOC"}
-              <input
-                type="file"
-                accept=".pdf,.doc,.docx"
-                className="hidden"
-                onChange={(e) => setResumeFile(e.target.files?.[0] ?? null)}
-              />
-            </label>
           </section>
 
           <div className="flex justify-end">
