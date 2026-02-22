@@ -40,6 +40,18 @@ type IngestResponse = {
   };
 };
 
+type MarketSnapshotResponse = {
+  provider: string;
+  databricks_table?: string | null;
+  sample_size: number;
+  market_base_median: number;
+  market_bonus_avg: number;
+  market_signing_avg: number;
+  market_total_est: number;
+  offer_total_est: number;
+  offer_vs_market_ratio: number;
+};
+
 type ResultsAnalysisData = {
   overallScore: number;
   categoryScores: {
@@ -198,6 +210,19 @@ const Submission = () => {
       }
       const evalJson = (await evalResp.json()) as WorkflowEvaluation;
 
+      let marketSnapshot: MarketSnapshotResponse | null = null;
+      try {
+        const marketResp = await fetch(`${apiBaseUrl}/offers/${ingestJson.offer_id}/market-snapshot`, {
+          method: "GET",
+          headers: { "X-User-Id": "42" },
+        });
+        if (marketResp.ok) {
+          marketSnapshot = (await marketResp.json()) as MarketSnapshotResponse;
+        }
+      } catch {
+        // Keep UX resilient; chart can still use fallback derivation.
+      }
+
       const submission = {
         offers: offers.map((o) => ({ id: o.id, fileName: o.file.name, isCurrent: o.isCurrent })),
         priorities,
@@ -207,6 +232,9 @@ const Submission = () => {
       sessionStorage.setItem("offergo-demo-analysis", JSON.stringify(mapEvalToAnalysis(evalJson, currentOffer.file.name)));
       sessionStorage.setItem("offergo-workflow-eval", JSON.stringify(evalJson));
       sessionStorage.setItem("offergo-ingest-parsed", JSON.stringify(ingestJson.parsed ?? {}));
+      if (marketSnapshot) {
+        sessionStorage.setItem("offergo-market-snapshot", JSON.stringify(marketSnapshot));
+      }
       navigate("/results");
     } catch (error) {
       toast({

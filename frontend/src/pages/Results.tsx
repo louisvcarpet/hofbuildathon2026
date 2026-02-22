@@ -80,6 +80,18 @@ interface WorkflowEvaluation {
   risks: string[];
   one_paragraph_summary: string;
 }
+
+interface MarketSnapshot {
+  provider: string;
+  databricks_table?: string | null;
+  sample_size: number;
+  market_base_median: number;
+  market_bonus_avg: number;
+  market_signing_avg: number;
+  market_total_est: number;
+  offer_total_est: number;
+  offer_vs_market_ratio: number;
+}
  
 interface OfferChatResponse {
   answer: string;
@@ -278,6 +290,22 @@ const Results = () => {
     }
 
     const rawParsed = sessionStorage.getItem("offergo-ingest-parsed");
+    const rawMarketSnapshot = sessionStorage.getItem("offergo-market-snapshot");
+    if (rawMarketSnapshot) {
+      try {
+        const market = JSON.parse(rawMarketSnapshot) as MarketSnapshot;
+        if (market.offer_total_est > 0 && market.market_total_est > 0) {
+          setOfferVsMarket({
+            offerTotal: market.offer_total_est,
+            marketTotal: market.market_total_est,
+          });
+          return;
+        }
+      } catch {
+        // noop
+      }
+    }
+
     if (rawParsed) {
       try {
         const parsed = JSON.parse(rawParsed) as {

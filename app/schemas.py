@@ -86,3 +86,15 @@ class OfferChatRequest(BaseModel):
 
 class OfferChatResponse(BaseModel):
     answer: str = Field(min_length=1, max_length=4000)
+
+
+class MarketSnapshotResponse(BaseModel):
+    provider: str
+    databricks_table: str | None = None
+    sample_size: int
+    market_base_median: float
+    market_bonus_avg: float
+    market_signing_avg: float
+    market_total_est: float
+    offer_total_est: float
+    offer_vs_market_ratio: float
