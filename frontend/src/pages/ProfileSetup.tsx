@@ -19,7 +19,7 @@ const ProfileSetup = () => {
       updateProfile({ resumeName: resumeFile.name });
     }
     completeProfile();
-    navigate("/");
+    navigate("/dashboard");
   };
 
   return (
@@ -42,6 +42,23 @@ const ProfileSetup = () => {
               {isEditMode ? "Update your information below." : "This profile personalizes your evaluation."}
             </p>
           </div>
+
+          {/* Account */}
+          {!isEditMode && (
+            <section className="card-elevated p-6 space-y-5">
+              <h2 className="text-lg font-semibold">Account</h2>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Email</Label>
+                  <Input type="email" placeholder="e.g. alex@example.com" value={profile.email} onChange={(e) => updateProfile({ email: e.target.value })} />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Password</Label>
+                  <Input type="password" placeholder="Create a password" value={profile.password} onChange={(e) => updateProfile({ password: e.target.value })} />
+                </div>
+              </div>
+            </section>
+          )}
 
           {/* Personal */}
           <section className="card-elevated p-6 space-y-5">
