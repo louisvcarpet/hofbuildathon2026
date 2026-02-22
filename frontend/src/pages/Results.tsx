@@ -30,6 +30,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { toast } from "@/hooks/use-toast";
 
 /* ── types ── */
 interface CategoryScores {
@@ -58,11 +59,30 @@ interface AnalysisData {
   negotiationInsights: string;
   comparisonData: OfferComparison[];
   confidence: number;
+  recommendation?: "accept" | "renegotiate" | "needs_more_info";
 }
 
 interface ChatMessage {
   role: "user" | "ai";
   content: string;
+}
+
+interface SubmissionPriorities {
+  financial: number;
+  career: number;
+  lifestyle: number;
+  alignment: number;
+}
+
+interface WorkflowEvaluation {
+  recommendation: "accept" | "renegotiate" | "needs_more_info";
+  key_drivers: { label: string; impact: "positive" | "negative" | "neutral" }[];
+  risks: string[];
+  one_paragraph_summary: string;
+}
+ 
+interface OfferChatResponse {
+  answer: string;
 }
 
 /* ── demo data generator ── */
@@ -105,6 +125,7 @@ function generateDemoData(): AnalysisData {
       "Consider negotiating the sign-on clawback down to 6 months and requesting a remote-work addendum. Equity refresh after Year 2 is common at this stage — worth raising upfront. PTO policy is below industry average; request 5 additional days.",
     comparisonData: [],
     confidence: 82,
+    recommendation: "accept",
   };
 
   if (offerCount > 1) {
@@ -154,34 +175,74 @@ function highestInRow(comparison: OfferComparison[], field: keyof Omit<OfferComp
   return max;
 }
 
-/* ── demo chat responses ── */
-const CHAT_RESPONSES: Record<string, string> = {
-  default:
-    "Based on the offer analysis, I'd recommend focusing on the equity clawback and remote-work terms as your primary negotiation levers. Would you like me to draft specific counter-proposal language?",
-  equity:
-    "The equity component represents approximately 35% of your total compensation. Given the current 409A valuation and typical Series C appreciation curves, the expected value over 4 years is $320K–$580K. However, liquidity risk is moderate — there's no guaranteed secondary market.",
-  negotiate:
-    "Three high-impact negotiation moves: (1) Reduce sign-on clawback from 12 to 6 months, (2) Request a Year-2 equity refresh clause, (3) Add explicit remote-work language. These are common asks at this level and unlikely to jeopardize the offer.",
-  salary:
-    "Your base salary sits at the 78th percentile for this role, level, and geography. Pushing for a 5–8% increase is reasonable given your experience, but I'd prioritize equity refresh over base — the long-term delta is significantly larger.",
-};
+function recommendationLabel(rec: "accept" | "renegotiate" | "needs_more_info") {
+  if (rec === "accept") return "Accept";
+  if (rec === "renegotiate") return "Renegotiate";
+  return "Needs More Info";
+}
 
-function getAIResponse(msg: string): string {
-  const lower = msg.toLowerCase();
-  if (lower.includes("equity") || lower.includes("stock") || lower.includes("vest"))
-    return CHAT_RESPONSES.equity;
-  if (lower.includes("negotiat") || lower.includes("counter") || lower.includes("ask"))
-    return CHAT_RESPONSES.negotiate;
-  if (lower.includes("salary") || lower.includes("base") || lower.includes("pay"))
-    return CHAT_RESPONSES.salary;
-  return CHAT_RESPONSES.default;
+function recommendationClass(rec: "accept" | "renegotiate" | "needs_more_info") {
+  if (rec === "accept") return "bg-emerald-500/15 text-emerald-400 border-emerald-500/30";
+  if (rec === "renegotiate") return "bg-sky-500/15 text-sky-400 border-sky-500/30";
+  return "bg-amber-500/15 text-amber-400 border-amber-500/30";
+}
+
+function recommendationBlurb(rec: "accept" | "renegotiate" | "needs_more_info") {
+  if (rec === "accept") return "Strong overall signal. Confirm terms in writing before signing.";
+  if (rec === "renegotiate") return "There is meaningful upside available. Prioritize 2-3 targeted asks.";
+  return "Important gaps remain. Collect missing details before committing.";
+}
+
+function priorityLabel(value: number) {
+  if (value >= 5) return "Very high";
+  if (value === 4) return "High";
+  if (value === 3) return "Medium";
+  if (value === 2) return "Low";
+  return "Very low";
+}
+
+function parseNumber(value: string): number | null {
+  const cleaned = value.replace(/[^0-9.-]/g, "");
+  if (!cleaned) return null;
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? num : null;
+}
+
+function extractMarketTotal(raw: WorkflowEvaluation | null): number | null {
+  if (!raw) return null;
+  const fromDrivers = raw.key_drivers
+    .map((k) => k.label.match(/market[^0-9-]*([\d,]+(?:\.\d+)?)/i)?.[1] ?? null)
+    .find(Boolean);
+  if (fromDrivers) return parseNumber(fromDrivers);
+  const fromSummary = raw.one_paragraph_summary.match(/market[^0-9-]*([\d,]+(?:\.\d+)?)/i)?.[1] ?? null;
+  if (fromSummary) return parseNumber(fromSummary);
+  return null;
+}
+
+function extractOfferTotal(raw: WorkflowEvaluation | null): number | null {
+  if (!raw) return null;
+  const fromSummary =
+    raw.one_paragraph_summary.match(/offered[^0-9-]*\$?([\d,]+(?:\.\d+)?)/i)?.[1] ??
+    raw.one_paragraph_summary.match(/offer[^0-9-]*\$?([\d,]+(?:\.\d+)?)/i)?.[1] ??
+    null;
+  if (fromSummary) return parseNumber(fromSummary);
+  const fromDrivers = raw.key_drivers
+    .map((k) => k.label.match(/offer[^0-9-]*([\d,]+(?:\.\d+)?)/i)?.[1] ?? null)
+    .find(Boolean);
+  if (fromDrivers) return parseNumber(fromDrivers);
+  return null;
 }
 
 /* ═══════════════ COMPONENT ═══════════════ */
 
 const Results = () => {
   const navigate = useNavigate();
+  const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://127.0.0.1:8000";
   const [data, setData] = useState<AnalysisData | null>(null);
+  const [backendOfferId, setBackendOfferId] = useState<number | null>(null);
+  const [priorities, setPriorities] = useState<SubmissionPriorities | null>(null);
+  const [workflowEval, setWorkflowEval] = useState<WorkflowEvaluation | null>(null);
+  const [offerVsMarket, setOfferVsMarket] = useState<{ offerTotal: number; marketTotal: number } | null>(null);
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
@@ -189,22 +250,122 @@ const Results = () => {
 
   useEffect(() => {
     setData(generateDemoData());
+
+    const rawSubmission = sessionStorage.getItem("offergo-submission");
+    if (rawSubmission) {
+      try {
+        const parsed = JSON.parse(rawSubmission);
+        if (parsed?.priorities) {
+          setPriorities(parsed.priorities as SubmissionPriorities);
+        }
+        if (typeof parsed?.backendOfferId === "number") {
+          setBackendOfferId(parsed.backendOfferId);
+        }
+      } catch {
+        // noop
+      }
+    }
+
+    let rawEval: WorkflowEvaluation | null = null;
+    const rawWorkflowEval = sessionStorage.getItem("offergo-workflow-eval");
+    if (rawWorkflowEval) {
+      try {
+        rawEval = JSON.parse(rawWorkflowEval) as WorkflowEvaluation;
+        setWorkflowEval(rawEval);
+      } catch {
+        // noop
+      }
+    }
+
+    const rawParsed = sessionStorage.getItem("offergo-ingest-parsed");
+    if (rawParsed) {
+      try {
+        const parsed = JSON.parse(rawParsed) as {
+          base_salary?: number | null;
+          bonus_target?: number | null;
+          equity_amount?: number | null;
+        };
+        const base = Number(parsed.base_salary ?? 0);
+        const bonusPct = Number(parsed.bonus_target ?? 0);
+        const equity = Number(parsed.equity_amount ?? 0);
+        let offerTotal = base + base * (bonusPct / 100) + equity;
+        let marketTotal = extractMarketTotal(rawEval) ?? 0;
+        const extractedOffer = extractOfferTotal(rawEval);
+
+        if (offerTotal <= 0 && extractedOffer && extractedOffer > 0) {
+          offerTotal = extractedOffer;
+        }
+        if (marketTotal <= 0 && offerTotal > 0) {
+          marketTotal = Math.round(
+            offerTotal * ((rawEval?.recommendation ?? "needs_more_info") === "accept" ? 0.95 : 1.2),
+          );
+        }
+        if (offerTotal <= 0 && marketTotal > 0) {
+          offerTotal = Math.round(marketTotal * 0.75);
+        }
+        if (offerTotal > 0 && marketTotal > 0) {
+          setOfferVsMarket({ offerTotal, marketTotal });
+        }
+      } catch {
+        // noop
+      }
+    } else {
+      const extractedOffer = extractOfferTotal(rawEval);
+      const extractedMarket = extractMarketTotal(rawEval);
+      let offerTotal = extractedOffer ?? 0;
+      let marketTotal = extractedMarket ?? 0;
+      if (offerTotal <= 0 && marketTotal > 0) {
+        offerTotal = Math.round(marketTotal * 0.75);
+      }
+      if (marketTotal <= 0 && offerTotal > 0) {
+        marketTotal = Math.round(
+          offerTotal * ((rawEval?.recommendation ?? "needs_more_info") === "accept" ? 0.95 : 1.2),
+        );
+      }
+      if (offerTotal > 0 && marketTotal > 0) {
+        setOfferVsMarket({ offerTotal, marketTotal });
+      }
+    }
   }, []);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat, typing]);
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     const text = input.trim();
     if (!text) return;
     setChat((prev) => [...prev, { role: "user", content: text }]);
     setInput("");
     setTyping(true);
-    setTimeout(() => {
-      setChat((prev) => [...prev, { role: "ai", content: getAIResponse(text) }]);
+    try {
+      if (!backendOfferId) {
+        throw new Error("Missing offer context for chat. Re-run analysis from Submit page.");
+      }
+      const resp = await fetch(`${apiBaseUrl}/offers/${backendOfferId}/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": "42",
+        },
+        body: JSON.stringify({ message: text }),
+      });
+      if (!resp.ok) {
+        throw new Error(await resp.text());
+      }
+      const payload = (await resp.json()) as OfferChatResponse;
+      setChat((prev) => [...prev, { role: "ai", content: payload.answer }]);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Chat failed";
+      setChat((prev) => [...prev, { role: "ai", content: `I couldn't reach Nemotron chat right now. ${msg}` }]);
+      toast({
+        title: "Nemotron chat unavailable",
+        description: msg,
+        variant: "destructive",
+      });
+    } finally {
       setTyping(false);
-    }, 1500);
+    }
   };
 
   if (!data) return null;
@@ -214,6 +375,15 @@ const Results = () => {
     animate: { opacity: 1, y: 0 },
     transition: { duration: 0.5, delay },
   });
+
+  const recommendation = workflowEval?.recommendation ?? data.recommendation ?? "needs_more_info";
+  const longSummary = workflowEval
+    ? `${workflowEval.one_paragraph_summary} ${
+        workflowEval.risks.length
+          ? `Key risk focus: ${workflowEval.risks.slice(0, 2).join(" ")}`
+          : ""
+      }`.trim()
+    : data.financialProjection;
 
   return (
     <div className="min-h-screen bg-background">
@@ -247,6 +417,66 @@ const Results = () => {
             benchmarks, and your personal priorities.
           </p>
         </motion.div>
+
+        <motion.div {...fadeUp(0.05)} className="mb-8 grid gap-4 lg:grid-cols-3">
+          <div className="card-elevated p-5 lg:col-span-2">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">Recommendation</p>
+              <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${recommendationClass(recommendation)}`}>
+                {recommendationLabel(recommendation)}
+              </span>
+            </div>
+            <p className="text-sm text-foreground">{recommendationBlurb(recommendation)}</p>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{longSummary}</p>
+          </div>
+          <div className="card-elevated p-5">
+            <p className="text-sm text-muted-foreground">Your Priorities Impact</p>
+            {priorities ? (
+              <div className="mt-3 space-y-2 text-sm">
+                <div className="flex items-center justify-between"><span>Financial</span><span className="font-medium">{priorityLabel(priorities.financial)} ({priorities.financial}/5)</span></div>
+                <div className="flex items-center justify-between"><span>Career</span><span className="font-medium">{priorityLabel(priorities.career)} ({priorities.career}/5)</span></div>
+                <div className="flex items-center justify-between"><span>Lifestyle</span><span className="font-medium">{priorityLabel(priorities.lifestyle)} ({priorities.lifestyle}/5)</span></div>
+                <div className="flex items-center justify-between"><span>Alignment</span><span className="font-medium">{priorityLabel(priorities.alignment)} ({priorities.alignment}/5)</span></div>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-muted-foreground">Priority sliders were not available for this run.</p>
+            )}
+          </div>
+        </motion.div>
+
+        {offerVsMarket && (
+          <motion.div {...fadeUp(0.08)} className="mb-8 card-elevated p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-semibold">Offer vs Market Median (Estimated)</h2>
+              <span className="text-xs text-muted-foreground">
+                Delta: {(offerVsMarket.offerTotal - offerVsMarket.marketTotal >= 0 ? "+" : "") +
+                  Math.round(offerVsMarket.offerTotal - offerVsMarket.marketTotal).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })}
+              </span>
+            </div>
+            <div className="space-y-4">
+              {[
+                { label: "Your offer total", value: offerVsMarket.offerTotal, color: "bg-primary" },
+                { label: "Market median total", value: offerVsMarket.marketTotal, color: "bg-sky-500" },
+              ].map((row) => {
+                const max = Math.max(offerVsMarket.offerTotal, offerVsMarket.marketTotal);
+                const widthPct = max > 0 ? Math.max(8, Math.round((row.value / max) * 100)) : 0;
+                return (
+                  <div key={row.label}>
+                    <div className="mb-1 flex items-center justify-between text-sm">
+                      <span>{row.label}</span>
+                      <span className="font-medium">
+                        {row.value.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+                      <div className={`h-full rounded-full ${row.color}`} style={{ width: `${widthPct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
 
         {/* Two-column: Score blocks + AI Insights */}
         <div className="grid gap-8 lg:grid-cols-2">

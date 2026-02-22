@@ -20,12 +20,53 @@ interface Priorities {
   alignment: number;
 }
 
+type WorkflowEvaluation = {
+  score: number;
+  recommendation: "accept" | "renegotiate" | "needs_more_info";
+  confidence: number;
+  key_drivers: { label: string; impact: "positive" | "negative" | "neutral" }[];
+  negotiation_targets: { item: string; ask: string; reason: string }[];
+  risks: string[];
+  followup_questions: string[];
+  one_paragraph_summary: string;
+};
+
+type IngestResponse = {
+  offer_id?: number;
+  parsed?: {
+    base_salary?: number | null;
+    bonus_target?: number | null;
+    equity_amount?: number | null;
+  };
+};
+
+type ResultsAnalysisData = {
+  overallScore: number;
+  categoryScores: {
+    financial: number;
+    career: number;
+    lifestyle: number;
+    alignment: number;
+    risk: number;
+  };
+  grade: string;
+  strengths: string[];
+  risks: string[];
+  financialProjection: string;
+  negotiationInsights: string;
+  comparisonData: { name: string; overall: number; financial: number; career: number; risk: number }[];
+  confidence: number;
+  recommendation: WorkflowEvaluation["recommendation"];
+};
+
 const Submission = () => {
   const navigate = useNavigate();
   const [offers, setOffers] = useState<UploadedOffer[]>([]);
   const [priorities, setPriorities] = useState<Priorities>({
     financial: 3, career: 3, lifestyle: 3, alignment: 3,
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://127.0.0.1:8000";
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -55,7 +96,62 @@ const Submission = () => {
     );
   };
 
-  const handleSubmit = () => {
+  const toGrade = (score100: number): string => {
+    if (score100 >= 93) return "A";
+    if (score100 >= 85) return "A-";
+    if (score100 >= 78) return "B+";
+    if (score100 >= 70) return "B";
+    if (score100 >= 62) return "C";
+    return "D";
+  };
+
+  const clamp = (n: number, low: number, high: number) => Math.max(low, Math.min(high, n));
+
+  const mapEvalToAnalysis = (evalOut: WorkflowEvaluation, currentFileName: string): ResultsAnalysisData => {
+    const overallScore = clamp(Math.round(evalOut.score * 10), 0, 100);
+    const confidence = clamp(Math.round(evalOut.confidence * 100), 0, 100);
+    const riskPenalty = evalOut.recommendation === "needs_more_info" ? 18 : evalOut.recommendation === "renegotiate" ? 8 : 0;
+    const riskScore = clamp(Math.round(76 - evalOut.risks.length * 7 - riskPenalty + confidence * 0.1), 12, 95);
+    const categoryScores = {
+      financial: clamp(Math.round(overallScore + (priorities.financial - 3) * 6), 8, 98),
+      career: clamp(Math.round(overallScore - 4 + (priorities.career - 3) * 6), 8, 98),
+      lifestyle: clamp(Math.round(overallScore - 8 + (priorities.lifestyle - 3) * 6), 8, 95),
+      alignment: clamp(Math.round(overallScore - 6 + (priorities.alignment - 3) * 6), 8, 96),
+      risk: riskScore,
+    };
+
+    const strengths = evalOut.key_drivers
+      .filter((d) => d.impact === "positive" || d.impact === "neutral")
+      .map((d) => d.label)
+      .slice(0, 6);
+    const negotiationInsights =
+      evalOut.negotiation_targets.length > 0
+        ? evalOut.negotiation_targets.map((t) => `${t.item}: ${t.ask} (${t.reason})`).join(" ")
+        : "No negotiation targets were returned by the model.";
+
+    return {
+      overallScore,
+      categoryScores,
+      grade: toGrade(overallScore),
+      strengths: strengths.length ? strengths : ["Model did not return positive key drivers."],
+      risks: evalOut.risks,
+      financialProjection: evalOut.one_paragraph_summary,
+      negotiationInsights,
+      comparisonData: [
+        {
+          name: currentFileName.replace(/\.(pdf|doc|docx)$/i, ""),
+          overall: overallScore,
+          financial: categoryScores.financial,
+          career: categoryScores.career,
+          risk: categoryScores.risk,
+        },
+      ],
+      confidence,
+      recommendation: evalOut.recommendation,
+    };
+  };
+
+  const handleSubmit = async () => {
     if (offers.length === 0) {
       toast({ title: "Upload required", description: "Please upload at least one offer letter.", variant: "destructive" });
       return;
@@ -64,12 +160,63 @@ const Submission = () => {
       toast({ title: "Selection required", description: "Please select a current offer.", variant: "destructive" });
       return;
     }
-    const submission = {
-      offers: offers.map((o) => ({ id: o.id, fileName: o.file.name, isCurrent: o.isCurrent })),
-      priorities,
-    };
-    sessionStorage.setItem("offergo-submission", JSON.stringify(submission));
-    navigate("/analyzing");
+    const currentOffer = offers.find((o) => o.isCurrent);
+    if (!currentOffer) return;
+    if (!currentOffer.file.name.toLowerCase().endsWith(".pdf")) {
+      toast({ title: "PDF required", description: "Please upload a PDF offer letter.", variant: "destructive" });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", currentOffer.file);
+      formData.append("priority_financial", String(priorities.financial));
+      formData.append("priority_career", String(priorities.career));
+      formData.append("priority_lifestyle", String(priorities.lifestyle));
+      formData.append("priority_alignment", String(priorities.alignment));
+
+      const ingestResp = await fetch(`${apiBaseUrl}/offers/ingest-pdf?create_records=true`, {
+        method: "POST",
+        headers: { "X-User-Id": "42" },
+        body: formData,
+      });
+      if (!ingestResp.ok) {
+        throw new Error(await ingestResp.text());
+      }
+      const ingestJson = (await ingestResp.json()) as IngestResponse;
+      if (!ingestJson.offer_id) {
+        throw new Error("Ingest succeeded but no offer_id was returned.");
+      }
+
+      const evalResp = await fetch(`${apiBaseUrl}/offers/${ingestJson.offer_id}/evaluate?mode=workflow`, {
+        method: "POST",
+        headers: { "X-User-Id": "42" },
+      });
+      if (!evalResp.ok) {
+        throw new Error(await evalResp.text());
+      }
+      const evalJson = (await evalResp.json()) as WorkflowEvaluation;
+
+      const submission = {
+        offers: offers.map((o) => ({ id: o.id, fileName: o.file.name, isCurrent: o.isCurrent })),
+        priorities,
+        backendOfferId: ingestJson.offer_id,
+      };
+      sessionStorage.setItem("offergo-submission", JSON.stringify(submission));
+      sessionStorage.setItem("offergo-demo-analysis", JSON.stringify(mapEvalToAnalysis(evalJson, currentOffer.file.name)));
+      sessionStorage.setItem("offergo-workflow-eval", JSON.stringify(evalJson));
+      sessionStorage.setItem("offergo-ingest-parsed", JSON.stringify(ingestJson.parsed ?? {}));
+      navigate("/results");
+    } catch (error) {
+      toast({
+        title: "Analysis failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -191,9 +338,10 @@ const Submission = () => {
             <Button
               size="lg"
               onClick={handleSubmit}
+              disabled={isSubmitting}
               className="glow-primary bg-primary text-primary-foreground hover:bg-primary/90 px-10 py-6 text-base font-semibold"
             >
-              Analyze Offer
+              {isSubmitting ? "Analyzing..." : "Analyze Offer"}
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </div>

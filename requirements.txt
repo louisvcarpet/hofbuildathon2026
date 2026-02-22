@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+requests
+pytest
+httpx
+langgraph
+pypdf
+python-multipart

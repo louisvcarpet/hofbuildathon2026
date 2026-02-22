@@ -1,25 +1,20 @@
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Upload, Check, Save } from "lucide-react";
+import { Check, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useProfile } from "@/hooks/use-profile";
-import { useState } from "react";
 import Navbar from "@/components/Navbar";
 
 const ProfileSetup = () => {
   const navigate = useNavigate();
   const { profile, updateProfile, completeProfile } = useProfile();
-  const [resumeFile, setResumeFile] = useState<File | null>(null);
   const isEditMode = profile.completed;
 
   const handleComplete = () => {
-    if (resumeFile) {
-      updateProfile({ resumeName: resumeFile.name });
-    }
     completeProfile();
-    navigate("/");
+    navigate("/dashboard");
   };
 
   return (
@@ -42,6 +37,23 @@ const ProfileSetup = () => {
               {isEditMode ? "Update your information below." : "This profile personalizes your evaluation."}
             </p>
           </div>
+
+          {/* Account */}
+          {!isEditMode && (
+            <section className="card-elevated p-6 space-y-5">
+              <h2 className="text-lg font-semibold">Account</h2>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Email</Label>
+                  <Input type="email" placeholder="e.g. alex@example.com" value={profile.email} onChange={(e) => updateProfile({ email: e.target.value })} />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Password</Label>
+                  <Input type="password" placeholder="Create a password" value={profile.password} onChange={(e) => updateProfile({ password: e.target.value })} />
+                </div>
+              </div>
+            </section>
+          )}
 
           {/* Personal */}
           <section className="card-elevated p-6 space-y-5">
@@ -83,21 +95,6 @@ const ProfileSetup = () => {
                 <Input placeholder="e.g. 20000 @ 5.5%" value={profile.debts} onChange={(e) => updateProfile({ debts: e.target.value })} />
               </div>
             </div>
-          </section>
-
-          {/* Resume */}
-          <section className="card-elevated p-6 space-y-4">
-            <h2 className="text-lg font-semibold">Resume</h2>
-            <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-border bg-secondary/50 px-4 py-3 text-sm text-muted-foreground hover:border-primary/50 transition-colors">
-              <Upload className="h-4 w-4" />
-              {resumeFile ? resumeFile.name : profile.resumeName ?? "Upload PDF or DOC"}
-              <input
-                type="file"
-                accept=".pdf,.doc,.docx"
-                className="hidden"
-                onChange={(e) => setResumeFile(e.target.files?.[0] ?? null)}
-              />
-            </label>
           </section>
 
           <div className="flex justify-end">

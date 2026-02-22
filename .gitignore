@@ -7,3 +7,5 @@ __pycache__/
 .venv/
 .vscode/
 .DS_Store
+offer_eval.db
+frontend/node_modules/

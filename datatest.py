@@ -1,59 +1,89 @@
 import os
-from pyspark.sql import SparkSession
 from dotenv import load_dotenv
+from databricks import sql
 
 load_dotenv()
 
 # Databricks connection details from .env
 SERVER_HOSTNAME = os.getenv("DATABRICKS_SERVER_HOSTNAME")
+HTTP_PATH = os.getenv("DATABRICKS_HTTP_PATH")
 ACCESS_TOKEN = os.getenv("DATABRICKS_TOKEN")
 
-def create_spark_session():
+def connect_to_databricks():
     """
-    Create a Spark session connected to Databricks using Databricks Connect
-    """
-    spark = (
-        SparkSession.builder
-        .remote(f"sc://{SERVER_HOSTNAME}:443")
-        .config("spark.databricks.service.token", ACCESS_TOKEN)
-        .getOrCreate()
-    )
-    return spark
-
-
-def query_databricks_table(spark, table_name):
-    """
-    Query a Unity Catalog table from Databricks
+    Create a connection to Databricks SQL Warehouse with timeout
     """
     try:
-        df = spark.sql(f"SELECT * FROM {table_name} LIMIT 10")
+        print(f"Attempting to connect to {SERVER_HOSTNAME}...")
+        connection = sql.connect(
+            server_hostname=SERVER_HOSTNAME,
+            http_path=HTTP_PATH,
+            personal_access_token=ACCESS_TOKEN,
+            request_timeout=30  # 30 second timeout
+        )
+        print("Successfully connected!")
+        return connection
+    except Exception as e:
+        print(f"Connection error: {e}")
+        print(f"  Server: {SERVER_HOSTNAME}")
+        print(f"  HTTP Path: {HTTP_PATH}")
+        print(f"  Token present: {'Yes' if ACCESS_TOKEN else 'No'}")
+        return None
 
+
+def query_databricks_table(connection, table_name):
+    """
+    Query a Unity Catalog table from Databricks and print the first 10 rows
+    """
+    try:
+        cursor = connection.cursor()
+        
+        # Query the table with LIMIT 10
+        query = f"SELECT * FROM {table_name} LIMIT 10"
+        cursor.execute(query)
+        
+        # Fetch results
+        results = cursor.fetchall()
+        columns = [desc[0] for desc in cursor.description]
+        
         print(f"\nTable: {table_name}")
-        print(f"Rows Retrieved: {df.count()}")
-        print("\nData:")
-        df.show(10, truncate=False)
-
-        return df
+        print(f"Rows Retrieved: {len(results)}")
+        print(f"Columns: {', '.join(columns)}")
+        print("\n--- First 10 Rows ---")
+        
+        # Print header
+        print(" | ".join(columns))
+        print("-" * 80)
+        
+        # Print rows
+        for row in results:
+            print(" | ".join(str(val) for val in row))
+        
+        cursor.close()
+        return results
 
     except Exception as e:
-        print(f"\n Error querying table {table_name}: {e}")
+        print(f"Error querying table {table_name}: {e}")
         return None
 
 
 if __name__ == "__main__":
-    print("Creating Spark session...")
-    spark = create_spark_session()
-
-    print("Connected to Databricks!")
-
-    # ✅ Use full 3-level namespace (catalog.schema.table)
-    table_name = "workspace.buildathon.market_data_intelligent"
-
-    df = query_databricks_table(spark, table_name)
-
-    if df is not None:
-        print("\nSchema:")
-        df.printSchema()
-
-    spark.stop()
-    print("END!")
+    print("Connecting to Databricks warehouse...")
+    
+    connection = connect_to_databricks()
+    
+    if connection is None:
+        print("Failed to connect. Please check your .env file with:")
+        print("  DATABRICKS_SERVER_HOSTNAME=<your-server-hostname>")
+        print("  DATABRICKS_HTTP_PATH=<your-http-path>")
+        print("  DATABRICKS_TOKEN=<your-personal-access-token>")
+    else:
+        print("Connected to Databricks!")
+        
+        # Query the table
+        table_name = "workspace.buildathon.market_data_intelligent"
+        results = query_databricks_table(connection, table_name)
+        
+        connection.close()
+        print("\nConnection closed!")
+        print("END!")

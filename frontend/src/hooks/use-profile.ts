@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 
 export interface ProfileData {
+  email: string;
+  password: string;
   name: string;
   city: string;
   country: string;
@@ -15,6 +17,8 @@ export interface ProfileData {
 const STORAGE_KEY = "offergo-profile";
 
 const emptyProfile: ProfileData = {
+  email: "",
+  password: "",
   name: "",
   city: "",
   country: "",
