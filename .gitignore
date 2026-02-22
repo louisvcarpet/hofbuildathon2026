@@ -5,6 +5,7 @@ config.py
 __pycache__/
 *.pyc
 .venv/
+venv/
 .vscode/
 .DS_Store
 offer_eval.db
