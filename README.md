@@ -1,19 +1,30 @@
-# OfferGo Buildathon (2026)
+# OfferGo
 
-This repo contains:
-- A FastAPI backend for PDF offer ingestion, evaluation workflow, Databricks market comps, and Nemotron chat.
-- A React/Vite frontend for upload, analysis, and results UI.
+OfferGo is a full-stack app that:
+- ingests offer letters (PDF),
+- benchmarks compensation using Databricks market data,
+- runs a Nemotron-based evaluation workflow,
+- shows recommendations + charts,
+- supports follow-up chat on the analyzed offer.
+
+This guide is written for someone cloning the repo on a new machine.
 
 ## 1) Prerequisites
 
-- Python 3.10+ (3.13 also works in this repo)
+- Git
+- Python 3.10+
 - Node.js 18+ and npm
-- Databricks SQL warehouse access
-- NVIDIA NIM API key (for Nemotron)
+- Databricks SQL warehouse credentials
+- NVIDIA NIM API key
 
-## 2) Clone and install
+## 2) Clone the repo
 
-From repo root:
+```bash
+git clone <YOUR_REPO_URL>
+cd hofbuildathon2026
+```
+
+## 3) Backend setup
 
 ```bash
 python3 -m venv .venv
@@ -21,17 +32,18 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Frontend:
+## 4) Frontend setup
 
 ```bash
 cd frontend
 npm install
 cd ..
+npm run dev
 ```
 
-## 3) Environment file (`.env`)
+## 5) Configure environment variables
 
-Create/update `.env` in repo root:
+Create `.env` in the project root:
 
 ```env
 # Databricks
@@ -50,55 +62,52 @@ NIM_BASE_URL=https://integrate.api.nvidia.com/v1
 NIM_MODEL=nvidia/nvidia-nemotron-nano-9b-v2
 NIM_JSON_MODE=true
 
-# Optional legacy flag (safe to keep)
+# Legacy flag (optional)
 USE_COMP_STUB=true
 ```
 
-## 4) Run backend
+Optional frontend env file (`frontend/.env`):
+
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
+## 6) Run the app
+
+Start backend (terminal 1):
 
 ```bash
 source .venv/bin/activate
 python -m uvicorn app.main:app --reload --env-file .env --log-level debug
 ```
 
-Backend base URL:
-- `http://127.0.0.1:8000`
-
-API docs:
-- `http://127.0.0.1:8000/docs`
-
-## 5) Run frontend
-
-In a new terminal:
+Start frontend (terminal 2):
 
 ```bash
 cd frontend
 npm run dev
 ```
 
-Frontend URL (default Vite):
-- `http://127.0.0.1:8080` (or shown terminal port)
+URLs:
+- Frontend: `http://127.0.0.1:8080` (or Vite-provided port)
+- Backend: `http://127.0.0.1:8000`
+- Backend docs: `http://127.0.0.1:8000/docs`
 
-If needed, set `frontend/.env`:
+## 7) Quick manual test
 
-```env
-VITE_API_BASE_URL=http://127.0.0.1:8000
-```
+1. Open frontend at `/submit`
+2. Upload a PDF
+3. Set priorities
+4. Click **Analyze Offer**
+5. Confirm results page shows:
+   - recommendation,
+   - score bars,
+   - market snapshot chart,
+   - Nemotron chat responses
 
-## 6) End-to-end flow
+## 8) API test (curl)
 
-1. Open frontend `/submit`
-2. Upload a PDF offer
-3. Set priorities and click **Analyze Offer**
-4. App calls:
-   - `POST /offers/ingest-pdf`
-   - `POST /offers/{offer_id}/evaluate?mode=workflow`
-   - `GET /offers/{offer_id}/market-snapshot`
-5. Results page shows recommendation, score bars, market comparison, and Nemotron chat.
-
-## 7) Quick API test with curl
-
-Upload and create offer:
+Upload + create records:
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/offers/ingest-pdf?create_records=true" \
@@ -110,7 +119,7 @@ curl -X POST "http://127.0.0.1:8000/offers/ingest-pdf?create_records=true" \
   -F "priority_alignment=3"
 ```
 
-Evaluate (replace `<offer_id>`):
+Evaluate:
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/offers/<offer_id>/evaluate?mode=workflow" \
@@ -133,13 +142,13 @@ curl -X POST "http://127.0.0.1:8000/offers/<offer_id>/chat" \
   -d '{"message":"Should I renegotiate base and bonus?"}'
 ```
 
-## 8) Troubleshooting
+## 9) Troubleshooting
 
-- `Offer not found` in chat:
+- `Offer not found`
   - Re-run upload/analyze to generate a fresh `offer_id`.
-- `LLM_AUTH_FAILED`:
-  - Verify `NIM_API_KEY` and restart backend.
-- Databricks connection appears active but no useful market rows:
-  - Confirm `MARKET_DATA_TABLE` exists and contains expected columns/data.
-- If frontend looks stale:
+- `LLM_AUTH_FAILED`
+  - Check `NIM_API_KEY`, restart backend.
+- Databricks connected but bad/empty market values
+  - Verify `MARKET_DATA_TABLE` and column data.
+- UI not updating
   - Hard refresh browser (`Cmd+Shift+R`).
