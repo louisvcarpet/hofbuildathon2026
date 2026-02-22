@@ -1,0 +1,35 @@
+Metadata-Version: 2.4
+Name: hofbuildathon2026
+Version: 0.1.0
+Summary: AI Mailroom application using LangGraph and Databricks
+Author-email: Blake Chang <your-email@example.com>
+License: MIT
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: databricks-sql-connector>=3.0.0
+Requires-Dist: langgraph>=0.0.1
+Requires-Dist: langchain>=0.1.0
+Requires-Dist: langchain-openai>=0.0.1
+Requires-Dist: python-dotenv>=1.0.0
+Requires-Dist: pandas>=2.0.0
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: fastapi>=0.104.0
+Requires-Dist: uvicorn>=0.24.0
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: requests>=2.31.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.4.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.21.0; extra == "dev"
+Requires-Dist: black>=23.0.0; extra == "dev"
+Requires-Dist: flake8>=6.0.0; extra == "dev"
+Requires-Dist: mypy>=1.5.0; extra == "dev"
+Requires-Dist: ruff>=0.1.0; extra == "dev"
+
+# hofbuildathon2026
+<<<<<<< HEAD
+
+
+=======
+>>>>>>> 5268533f27441c11616a81c5256584c4d97a3342
+
+# TryTry
