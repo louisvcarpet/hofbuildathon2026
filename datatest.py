@@ -6,55 +6,54 @@ load_dotenv()
 
 # Databricks connection details from .env
 SERVER_HOSTNAME = os.getenv("DATABRICKS_SERVER_HOSTNAME")
-HTTP_PATH = os.getenv("DATABRICKS_HTTP_PATH")
 ACCESS_TOKEN = os.getenv("DATABRICKS_TOKEN")
 
 def create_spark_session():
     """
-    Create a Spark session connected to Databricks
+    Create a Spark session connected to Databricks using Databricks Connect
     """
-    return SparkSession.builder \
-        .appName("DatabricksQuery") \
-        .config("spark.databricks.host", SERVER_HOSTNAME) \
-        .config("spark.databricks.token", ACCESS_TOKEN) \
-        .config("spark.databricks.cluster.profile", "singleNode") \
-        .config("spark.master", "local[*]") \
-        .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
-        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    spark = (
+        SparkSession.builder
+        .remote(f"sc://{SERVER_HOSTNAME}:443")
+        .config("spark.databricks.service.token", ACCESS_TOKEN)
         .getOrCreate()
+    )
+    return spark
 
-def query_databricks_table(spark, table_name, limit=10):
+
+def query_databricks_table(spark, table_name):
     """
-    Query a table from Databricks and display results
+    Query a Unity Catalog table from Databricks
     """
     try:
-        df = spark.sql(f"SELECT * FROM {table_name} LIMIT {limit}")
+        df = spark.sql(f"SELECT * FROM {table_name} LIMIT 10")
+
         print(f"\nTable: {table_name}")
-        print(f"Rows: {df.count()}")
+        print(f"Rows Retrieved: {df.count()}")
         print("\nData:")
-        df.show(limit, truncate=False)
+        df.show(10, truncate=False)
+
         return df
+
     except Exception as e:
-        print(f"Error querying table {table_name}: {e}")
+        print(f"\n Error querying table {table_name}: {e}")
         return None
+
 
 if __name__ == "__main__":
     print("Creating Spark session...")
     spark = create_spark_session()
-    
-    print("Connecting to Databricks...")
-    
-    # Query the buildathonoffers table
-    table_name = "default.buildathonoffers"
-    df = query_databricks_table(spark, table_name, limit=10)
-    
-    if df:
-        print(f"\nSchema:")
+
+    print("Connected to Databricks!")
+
+    # ✅ Use full 3-level namespace (catalog.schema.table)
+    table_name = "workspace.buildathon.market_data_intelligent"
+
+    df = query_databricks_table(spark, table_name)
+
+    if df is not None:
+        print("\nSchema:")
         df.printSchema()
-    
+
     spark.stop()
-    print("\nDone!")
-        
-    
-
-
+    print("END!")
